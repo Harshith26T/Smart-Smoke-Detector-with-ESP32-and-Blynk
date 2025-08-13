@@ -1,0 +1,82 @@
+#define BLYNK_TEMPLATE_ID "TMPL3HibJUE2e"
+#define BLYNK_TEMPLATE_NAME "Smoke Detector"
+#define BLYNK_AUTH_TOKEN "rHCZ-x-vHzWWVJxn4F66aVPDblvC00XQ"
+
+#include <Wire.h>
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+#define OLED_ADDRESS  0x3C
+#define MQ135_PIN     34
+#define SMOKE_THRESHOLD 250
+
+char ssid[] = "Har";
+char pass[] = "12345678";
+
+TwoWire myWire = TwoWire(0);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &myWire, OLED_RESET);
+
+bool smokeAlertSent = false;
+
+void setup() {
+  Serial.begin(115200);
+  myWire.begin(23, 22);  // SDA, SCL
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
+    Serial.println("OLED init failed");
+    while (true);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+}
+
+void loop() {
+  Blynk.run();
+
+  int analogValue = analogRead(MQ135_PIN);
+  float voltage = analogValue * (3.3 / 4095.0);
+
+  Serial.print("Value: ");
+  Serial.println(analogValue);
+
+  // Send analog value to V1 for chart
+  Blynk.virtualWrite(V1, analogValue);
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("Smoke Sensor (MQ135):");
+  display.setCursor(0, 15);
+  display.print("Analog: ");
+  display.println(analogValue);
+  display.setCursor(0, 30);
+  display.print("Voltage: ");
+  display.print(voltage, 2);
+  display.println(" V");
+
+  if (analogValue >= SMOKE_THRESHOLD) {
+    display.setCursor(0, 50);
+    display.println("!! Smoke Detected !!");
+
+    if (!smokeAlertSent) {
+      Blynk.logEvent("smoke_warning", "Smoke detected!");
+      Blynk.virtualWrite(V0, "SMOKE ALERT!");
+      smokeAlertSent = true;
+    }
+  } else {
+    Blynk.virtualWrite(V0, "Air OK");
+    smokeAlertSent = false;
+  }
+
+  display.display();
+  delay(1000);
+}
